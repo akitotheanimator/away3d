@@ -178,7 +178,7 @@ class AnimatorBase extends NamedAssetBase implements IAsset {
 		if (_isPlaying || !_autoUpdate)
 			return;
 
-		_time = _absoluteTime = Lib.getTimer();
+		_time = _absoluteTime = Std.int(Lib.getTimer());
 
 		_isPlaying = true;
 
@@ -274,7 +274,7 @@ class AnimatorBase extends NamedAssetBase implements IAsset {
 	 * Enter frame event handler for automatically updating the active state of the animator.
 	 */
 	private function onEnterFrame(event:Event = null):Void {
-		update(Lib.getTimer());
+		update(Std.int(Lib.getTimer()));
 	}
 
 	private function applyPositionDelta():Void {

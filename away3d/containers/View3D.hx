@@ -820,9 +820,8 @@ class View3D extends Sprite {
 	}
 
 	private function updateTime():Void {
-		var time:UInt = Lib.getTimer();
-		if (_time == 0)
-			_time = time;
+		var time:UInt = Std.int(Lib.getTimer());
+		if (_time == 0) _time = time;
 		_deltaTime = time - _time;
 		_time = time;
 	}

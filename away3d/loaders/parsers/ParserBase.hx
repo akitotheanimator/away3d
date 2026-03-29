@@ -355,7 +355,7 @@ import openfl.utils.Timer;
 	 * Called when the parsing pause interval has passed and parsing can proceed.
 	 */
 	private function onInterval(event:TimerEvent = null):Void {
-		_lastFrameTime = Lib.getTimer();
+		_lastFrameTime = Std.int(Lib.getTimer());
 		if (proceedParsing() && !_parsingFailure)
 			finishParsing();
 	}

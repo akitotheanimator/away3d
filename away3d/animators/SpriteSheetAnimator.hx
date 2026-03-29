@@ -162,7 +162,7 @@ class SpriteSheetAnimator extends AnimatorBase implements IAnimator {
 		}
 
 		_absoluteTime += dt;
-		var now:Int = Lib.getTimer();
+		var now:Int = Std.int(Lib.getTimer());
 
 		if ((now - _lastTime) > _ms) {
 			_mapDirty = true;
