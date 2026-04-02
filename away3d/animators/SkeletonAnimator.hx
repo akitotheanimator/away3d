@@ -284,7 +284,9 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		        basePose.translation.z += addPose.translation.z * _additiveWeight;
 		
 		        // rotation additive
-		        basePose.orientation = Quaternion.slerp(basePose.orientation, addPose.orientation, _additiveWeight);
+		        var blended:Quaternion = new Quaternion();
+		        blended.slerp(basePose.orientation, addPose.orientation, _additiveWeight);
+		        basePose.orientation = blended;
 		    }
 		}
 
