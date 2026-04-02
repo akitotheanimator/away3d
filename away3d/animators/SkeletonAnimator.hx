@@ -22,7 +22,7 @@ import openfl.utils.*;
  */
 class SkeletonAnimator extends AnimatorBase implements IAnimator {
 	public var globalMatrices(get, never):Vector<Float>;
-	public var globalPose(get, set):SkeletonPose;
+	public var globalPose(get, never):SkeletonPose;
 	public var skeleton(get, never):Skeleton;
 	public var forceCPU(get, never):Bool;
 	public var useCondensedIndices(get, set):Bool;
@@ -40,6 +40,12 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 	private var _jointsPerVertex:Int;
 	private var _activeSkeletonState:ISkeletonAnimationState;
 
+
+
+	private var _localPose:SkeletonPose = new SkeletonPose();
+	private var _overridePose:SkeletonPose = null;
+	private var _useOverridePose:Bool = false;
+	
 	/**
 	 * returns the calculated global matrices of the current skeleton pose.
 	 *
@@ -51,6 +57,28 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		return _globalMatrices;
 	}
 
+
+
+	
+	public function setOverridePose(pose:SkeletonPose):Void {
+	    _overridePose = pose;
+	    _useOverridePose = (pose != null);
+	    _globalPropertiesDirty = true;
+	}
+	
+	public function clearOverridePose():Void {
+	    _overridePose = null;
+	    _useOverridePose = false;
+	    _globalPropertiesDirty = true;
+	}
+	
+	public function getOverridePose():SkeletonPose {
+	    return _overridePose;
+	}
+
+
+
+	
 	/**
 	 * returns the current skeleton pose output from the animator.
 	 *
@@ -60,9 +88,6 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		if (_globalPropertiesDirty)
 			updateGlobalProperties();
 		return _globalPose;
-	}
-	private function set_globalPose(gp:SkeletonPose):SkeletonPose {
-		return _globalPose = gp;
 	}
 	/**
 	 * Returns the skeleton object in use by the animator - this defines the number and heirarchy of joints used by the
@@ -256,7 +281,13 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		_globalPropertiesDirty = false;
 
 		// get global pose
-		localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
+		if (_useOverridePose && _overridePose != null) {
+		    // Use override pose ONLY (local space → global)
+		    localToGlobalPose(_overridePose, _globalPose, _skeleton);
+		} else {
+		    // Default animation pipeline
+		    localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
+		}
 
 		// convert pose to matrix
 		var mtxOffset:Int = 0;
