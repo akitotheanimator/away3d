@@ -22,7 +22,7 @@ import openfl.utils.*;
  */
 class SkeletonAnimator extends AnimatorBase implements IAnimator {
 	public var globalMatrices(get, never):Vector<Float>;
-	public var globalPose(get, never):SkeletonPose;
+	public var globalPose(get, set):SkeletonPose;
 	public var skeleton(get, never):Skeleton;
 	public var forceCPU(get, never):Bool;
 	public var useCondensedIndices(get, set):Bool;
@@ -61,7 +61,9 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 			updateGlobalProperties();
 		return _globalPose;
 	}
-
+	private function set_globalPose(gp:SkeletonPose):SkeletonPose {
+		return _globalPose = gp;
+	}
 	/**
 	 * Returns the skeleton object in use by the animator - this defines the number and heirarchy of joints used by the
 	 * skinned geoemtry to which skeleon animator is applied.
