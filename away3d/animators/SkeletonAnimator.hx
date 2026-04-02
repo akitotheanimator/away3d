@@ -42,9 +42,19 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 
 
 
-	private var _localPose:SkeletonPose = new SkeletonPose();
-	private var _overridePose:SkeletonPose = null;
-	private var _useOverridePose:Bool = false;
+	//the additive pose mf
+	private var _additivePose:SkeletonPose = new SkeletonPose();
+	private var _additiveWeight:Float = 0;
+
+	
+	public function setAdditivePose(pose:SkeletonPose, weight:Float):Void {
+	    _additivePose = pose;
+	    _additiveWeight = Math.min(Math.max(weight, 0), 1); // clamp 0..1
+	    _globalPropertiesDirty = true; // mark global matrices dirty
+	}
+
+
+
 	
 	/**
 	 * returns the calculated global matrices of the current skeleton pose.
@@ -57,28 +67,6 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		return _globalMatrices;
 	}
 
-
-
-	
-	public function setOverridePose(pose:SkeletonPose):Void {
-	    _overridePose = pose;
-	    _useOverridePose = (pose != null);
-	    _globalPropertiesDirty = true;
-	}
-	
-	public function clearOverridePose():Void {
-	    _overridePose = null;
-	    _useOverridePose = false;
-	    _globalPropertiesDirty = true;
-	}
-	
-	public function getOverridePose():SkeletonPose {
-	    return _overridePose;
-	}
-
-
-
-	
 	/**
 	 * returns the current skeleton pose output from the animator.
 	 *
@@ -89,6 +77,7 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 			updateGlobalProperties();
 		return _globalPose;
 	}
+
 	/**
 	 * Returns the skeleton object in use by the animator - this defines the number and heirarchy of joints used by the
 	 * skinned geoemtry to which skeleon animator is applied.
@@ -281,12 +270,22 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		_globalPropertiesDirty = false;
 
 		// get global pose
-		if (_useOverridePose && _overridePose != null) {
-		    // Use override pose ONLY (local space → global)
-		    localToGlobalPose(_overridePose, _globalPose, _skeleton);
-		} else {
-		    // Default animation pipeline
-		    localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
+		localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
+		
+		// apply additive pose
+		if (_additiveWeight > 0) {
+		    for (i in 0..._numJoints) {
+		        var basePose:JointPose = _globalPose.jointPoses[i];
+		        var addPose:JointPose = _additivePose.jointPoses[i];
+		
+		        // translation additive
+		        basePose.translation.x += addPose.translation.x * _additiveWeight;
+		        basePose.translation.y += addPose.translation.y * _additiveWeight;
+		        basePose.translation.z += addPose.translation.z * _additiveWeight;
+		
+		        // rotation additive
+		        basePose.orientation = basePose.orientation.slerp(addPose.orientation, _additiveWeight);
+		    }
 		}
 
 		// convert pose to matrix
