@@ -40,22 +40,6 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 	private var _jointsPerVertex:Int;
 	private var _activeSkeletonState:ISkeletonAnimationState;
 
-
-
-	//the additive pose mf
-	private var _additivePose:SkeletonPose = new SkeletonPose();
-	private var _additiveWeight:Float = 0;
-
-	
-	public function setAdditivePose(pose:SkeletonPose, weight:Float):Void {
-	    _additivePose = pose;
-	    _additiveWeight = Math.min(Math.max(weight, 0), 1); // clamp 0..1
-	    _globalPropertiesDirty = true; // mark global matrices dirty
-	}
-
-
-
-	
 	/**
 	 * returns the calculated global matrices of the current skeleton pose.
 	 *
@@ -271,24 +255,6 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 
 		// get global pose
 		localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
-		
-		// apply additive pose
-		if (_additiveWeight > 0) {
-		    for (i in 0..._numJoints) {
-		        var basePose:JointPose = _globalPose.jointPoses[i];
-		        var addPose:JointPose = _additivePose.jointPoses[i];
-		
-		        // translation additive
-		        basePose.translation.x += addPose.translation.x * _additiveWeight;
-		        basePose.translation.y += addPose.translation.y * _additiveWeight;
-		        basePose.translation.z += addPose.translation.z * _additiveWeight;
-		
-		        // rotation additive
-		        var blended:Quaternion = new Quaternion();
-		        blended.slerp(basePose.orientation, addPose.orientation, _additiveWeight);
-		        basePose.orientation = blended;
-		    }
-		}
 
 		// convert pose to matrix
 		var mtxOffset:Int = 0;
