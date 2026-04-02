@@ -1,5 +1,10 @@
 [![Apache 2.0 License](https://img.shields.io/badge/license-Apache-blue.svg?style=flat)](LICENSE.md) [![Haxelib Version](https://img.shields.io/github/tag/openfl/away3d.svg?style=flat&label=haxelib)](http://lib.haxe.org/p/away3d) [![Build Status](https://img.shields.io/github/actions/workflow/status/openfl/away3d/main.yml?branch=master)](https://github.com/openfl/away3d/actions)
 
+
+*THIS WAS FORKED FROM CODENAME CREW'S AWAY3D BRANCH*
+This branch was made to add additional features.
+
+
 Away3D
 ======
 
