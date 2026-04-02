@@ -39,50 +39,28 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 	private var _useCondensedIndices:Bool;
 	private var _jointsPerVertex:Int;
 	private var _activeSkeletonState:ISkeletonAnimationState;
+	private var _activeAdditiveStates:Array<ISkeletonAnimationState> = []; // new
 
-	/**
-	 * returns the calculated global matrices of the current skeleton pose.
-	 *
-	 * @see #globalPose
-	 */
 	private function get_globalMatrices():Vector<Float> {
 		if (_globalPropertiesDirty)
 			updateGlobalProperties();
 		return _globalMatrices;
 	}
 
-	/**
-	 * returns the current skeleton pose output from the animator.
-	 *
-	 * @see away3d.animators.data.SkeletonPose
-	 */
 	private function get_globalPose():SkeletonPose {
 		if (_globalPropertiesDirty)
 			updateGlobalProperties();
 		return _globalPose;
 	}
 
-	/**
-	 * Returns the skeleton object in use by the animator - this defines the number and heirarchy of joints used by the
-	 * skinned geoemtry to which skeleon animator is applied.
-	 */
 	private function get_skeleton():Skeleton {
 		return _skeleton;
 	}
 
-	/**
-	 * Indicates whether the skeleton animator is disabled by default for GPU rendering, something that allows the animator to perform calculation on the GPU.
-	 * Defaults to false.
-	 */
 	private function get_forceCPU():Bool {
 		return _forceCPU;
 	}
 
-	/**
-	 * Offers the option of enabling GPU accelerated animation on skeletons larger than 32 joints
-	 * by condensing the number of joint index values required per mesh. Only applicable to
-	 * skeleton animations that utilise more than one mesh object. Defaults to false.
-	 */
 	private function get_useCondensedIndices():Bool {
 		return _useCondensedIndices;
 	}
@@ -91,13 +69,6 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		return _useCondensedIndices = value;
 	}
 
-	/**
-	 * Creates a new <code>SkeletonAnimator</code> object.
-	 *
-	 * @param skeletonAnimationSet The animation data set containing the skeleton animations used by the animator.
-	 * @param skeleton The skeleton object used for calculating the resulting global matrices for transforming skinned mesh data.
-	 * @param forceCPU Optional value that only allows the animator to perform calculation on the CPU. Defaults to false.
-	 */
 	public function new(animationSet:SkeletonAnimationSet, skeleton:Skeleton, forceCPU:Bool = false) {
 		super(animationSet);
 
@@ -110,38 +81,35 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 
 		var j:Int = 0;
 		for (i in 0..._numJoints) {
-			_globalMatrices[j++] = 1;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 1;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 0;
-			_globalMatrices[j++] = 1;
-			_globalMatrices[j++] = 0;
+			_globalMatrices[j++] = 1; _globalMatrices[j++] = 0; _globalMatrices[j++] = 0; _globalMatrices[j++] = 0;
+			_globalMatrices[j++] = 0; _globalMatrices[j++] = 1; _globalMatrices[j++] = 0; _globalMatrices[j++] = 0;
+			_globalMatrices[j++] = 0; _globalMatrices[j++] = 0; _globalMatrices[j++] = 1; _globalMatrices[j++] = 0;
 		}
 	}
 
-	/**
-	 * @inheritDoc
-	 */
 	public function clone():IAnimator {
-		/* The cast to SkeletonAnimationSet should never fail, as _animationSet can only be set
-			through the constructor, which will only accept a SkeletonAnimationSet. */
 		return new SkeletonAnimator(cast(_animationSet, SkeletonAnimationSet), _skeleton, _forceCPU);
 	}
 
-	/**
-	 * Plays an animation state registered with the given name in the animation data set.
-	 *
-	 * @param name The data set name of the animation state to be played.
-	 * @param transition An optional transition object that determines how the animator will transition from the currently active animation state.
-	 * @param offset An option offset time (in milliseconds) that resets the state's internal clock to the absolute time of the animator plus the offset value. Required for non-looping animation states.
-	 */
-	public function play(name:String, ?transition:IAnimationTransition = null, ?offset:Int = null):Void {
+	// UPDATED: supports additive animations
+	public function play(name:String, ?transition:IAnimationTransition = null, ?offset:Int = null, ?additive:Bool = false):Void {
+		if (additive) {
+			// Additive animation overlay
+			if (!_animationSet.hasAnimation(name))
+				throw new Error("Additive animation " + name + " not found!");
+
+			var additiveNode = _animationSet.getAnimation(name);
+			var additiveState = cast(getAnimationState(additiveNode), ISkeletonAnimationState);
+
+			if (offset != null && !Math.isNaN(offset))
+				additiveState.reset(Std.int(offset));
+
+			_activeAdditiveStates.push(additiveState);
+			start();
+			return;
+		}
+
+		// Base animation (existing behavior)
 		if (_activeAnimationName != name) {
 			_activeAnimationName = name;
 
@@ -149,41 +117,32 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 				throw new Error("Animation root node " + name + " not found!");
 
 			if (transition != null && _activeNode != null) {
-				// setup the transition
 				_activeNode = transition.getAnimationNode(this, _activeNode, _animationSet.getAnimation(name), _absoluteTime);
 				_activeNode.addEventListener(AnimationStateEvent.TRANSITION_COMPLETE, onTransitionComplete);
 			} else
 				_activeNode = _animationSet.getAnimation(name);
 
 			_activeState = getAnimationState(_activeNode);
+			_activeSkeletonState = cast(_activeState, ISkeletonAnimationState);
 
 			if (updatePosition) {
-				// update straight away to reset position deltas
 				_activeState.update(_absoluteTime);
 				_activeState.positionDelta;
 			}
-
-			_activeSkeletonState = cast(_activeState, ISkeletonAnimationState);
 		}
 
 		start();
 
-		// apply a time offset if specified
 		if (offset != null && !Math.isNaN(offset))
 			reset(name, Std.int(offset));
 	}
 
-	/**
-	 * @inheritDoc
-	 */
 	public function setRenderState(stage3DProxy:Stage3DProxy, renderable:IRenderable, vertexConstantOffset:Int, vertexStreamOffset:Int, camera:Camera3D):Void {
-		// do on request of globalProperties
 		if (_globalPropertiesDirty)
 			updateGlobalProperties();
 
 		var skinnedGeom:SkinnedSubGeometry = cast(cast(renderable, SubMesh).subGeometry, SkinnedSubGeometry);
 
-		// using condensed data
 		var numCondensedJoints:Int = skinnedGeom.numCondensedJoints;
 		if (_useCondensedIndices) {
 			if (skinnedGeom.numCondensedJoints == 0) {
@@ -212,134 +171,109 @@ class SkeletonAnimator extends AnimatorBase implements IAnimator {
 		skinnedGeom.activateJointWeightsBuffer(vertexStreamOffset + 1, stage3DProxy);
 	}
 
-	/**
-	 * @inheritDoc
-	 */
 	public function testGPUCompatibility(pass:MaterialPassBase):Void {
 		if (!_useCondensedIndices && (_forceCPU || _jointsPerVertex > 4 || pass.numUsedVertexConstants + _numJoints * 3 > 128))
 			_animationSet.cancelGPUCompatibility();
 	}
 
-	/**
-	 * Applies the calculated time delta to the active animation state node or state transition object.
-	 */
 	override private function updateDeltaTime(dt:Int):Void {
 		super.updateDeltaTime(dt);
-
-		// invalidate pose matrices
 		_globalPropertiesDirty = true;
-
-		// TODO: Faster data structure?
 		for (state in _skeletonAnimationStates)
 			state.dirty = true;
+
+		// remove finished additive animations
+		_activeAdditiveStates = _activeAdditiveStates.filter(function(s) return !s.isComplete());
 	}
 
-	private function updateCondensedMatrices(condensedIndexLookUp:Vector<UInt>, numJoints:Int):Void {
-		var i:Int = 0, j:Int = 0;
-		var len:Int;
-		var srcIndex:Int;
-
-		_condensedMatrices = new Vector<Float>();
-
-		do {
-			srcIndex = condensedIndexLookUp[i * 3] * 4;
-			len = srcIndex + 12;
-			// copy into condensed
-			while (srcIndex < len)
-				_condensedMatrices[j++] = _globalMatrices[srcIndex++];
-		} while (++i < numJoints);
-	}
-
+	// UPDATED: blend additive animations with base pose
 	private function updateGlobalProperties():Void {
 		_globalPropertiesDirty = false;
 
-		// get global pose
 		localToGlobalPose(_activeSkeletonState.getSkeletonPose(_skeleton), _globalPose, _skeleton);
 
-		// convert pose to matrix
+		for (addState in _activeAdditiveStates) {
+			var addPose:SkeletonPose = addState.getSkeletonPose(_skeleton);
+			applyAdditivePose(_globalPose, addPose);
+		}
+
+		// convert pose to matrices
 		var mtxOffset:Int = 0;
 		var globalPoses:Vector<JointPose> = _globalPose.jointPoses;
 		var raw:Vector<Float>;
-		var ox:Float, oy:Float, oz:Float, ow:Float;
-		var xy2:Float, xz2:Float, xw2:Float;
-		var yz2:Float, yw2:Float, zw2:Float;
-		var n11:Float, n12:Float, n13:Float;
-		var n21:Float, n22:Float, n23:Float;
-		var n31:Float, n32:Float, n33:Float;
-		var m11:Float, m12:Float, m13:Float, m14:Float;
-		var m21:Float, m22:Float, m23:Float, m24:Float;
-		var m31:Float, m32:Float, m33:Float, m34:Float;
 		var joints:Vector<SkeletonJoint> = _skeleton.joints;
 		var pose:JointPose;
 		var quat:Quaternion;
 		var vec:Vector3D;
-		var t:Float;
+		var n11:Float, n12:Float, n13:Float, n21:Float, n22:Float, n23:Float, n31:Float, n32:Float, n33:Float;
+		var m11:Float, m12:Float, m13:Float, m14:Float, m21:Float, m22:Float, m23:Float, m24:Float, m31:Float, m32:Float, m33:Float, m34:Float;
+		var ox:Float, oy:Float, oz:Float, ow:Float;
+		var xy2:Float, xz2:Float, xw2:Float, yz2:Float, yw2:Float, zw2:Float;
 
 		for (i in 0..._numJoints) {
 			pose = globalPoses[i];
 			quat = pose.orientation;
 			vec = pose.translation;
-			ox = quat.x;
-			oy = quat.y;
-			oz = quat.z;
-			ow = quat.w;
 
-			xy2 = (t = 2.0 * ox) * oy;
-			xz2 = t * oz;
-			xw2 = t * ow;
-			yz2 = (t = 2.0 * oy) * oz;
-			yw2 = t * ow;
-			zw2 = 2.0 * oz * ow;
+			ox = quat.x; oy = quat.y; oz = quat.z; ow = quat.w;
 
-			yz2 = 2.0 * oy * oz;
-			yw2 = 2.0 * oy * ow;
-			zw2 = 2.0 * oz * ow;
-			ox *= ox;
-			oy *= oy;
-			oz *= oz;
-			ow *= ow;
+			xy2 = 2.0 * ox * oy; xz2 = 2.0 * ox * oz; xw2 = 2.0 * ox * ow;
+			yz2 = 2.0 * oy * oz; yw2 = 2.0 * oy * ow; zw2 = 2.0 * oz * ow;
 
-			n11 = (t = ox - oy) - oz + ow;
-			n12 = xy2 - zw2;
-			n13 = xz2 + yw2;
-			n21 = xy2 + zw2;
-			n22 = -t - oz + ow;
-			n23 = yz2 - xw2;
-			n31 = xz2 - yw2;
-			n32 = yz2 + xw2;
-			n33 = -ox - oy + oz + ow;
+			ox *= ox; oy *= oy; oz *= oz; ow *= ow;
 
-			// prepend inverse bind pose
+			n11 = ox - oy - oz + ow; n12 = xy2 - zw2; n13 = xz2 + yw2;
+			n21 = xy2 + zw2; n22 = -ox + oy - oz + ow; n23 = yz2 - xw2;
+			n31 = xz2 - yw2; n32 = yz2 + xw2; n33 = -ox - oy + oz + ow;
+
 			raw = joints[i].inverseBindPose;
-			m11 = raw[0];
-			m12 = raw[4];
-			m13 = raw[8];
-			m14 = raw[12];
-			m21 = raw[1];
-			m22 = raw[5];
-			m23 = raw[9];
-			m24 = raw[13];
-			m31 = raw[2];
-			m32 = raw[6];
-			m33 = raw[10];
-			m34 = raw[14];
+			m11 = raw[0]; m12 = raw[4]; m13 = raw[8]; m14 = raw[12];
+			m21 = raw[1]; m22 = raw[5]; m23 = raw[9]; m24 = raw[13];
+			m31 = raw[2]; m32 = raw[6]; m33 = raw[10]; m34 = raw[14];
 
-			_globalMatrices[(mtxOffset)] = n11 * m11 + n12 * m21 + n13 * m31;
-			_globalMatrices[(mtxOffset + 1)] = n11 * m12 + n12 * m22 + n13 * m32;
-			_globalMatrices[(mtxOffset + 2)] = n11 * m13 + n12 * m23 + n13 * m33;
-			_globalMatrices[(mtxOffset + 3)] = n11 * m14 + n12 * m24 + n13 * m34 + vec.x;
-			_globalMatrices[(mtxOffset + 4)] = n21 * m11 + n22 * m21 + n23 * m31;
-			_globalMatrices[(mtxOffset + 5)] = n21 * m12 + n22 * m22 + n23 * m32;
-			_globalMatrices[(mtxOffset + 6)] = n21 * m13 + n22 * m23 + n23 * m33;
-			_globalMatrices[(mtxOffset + 7)] = n21 * m14 + n22 * m24 + n23 * m34 + vec.y;
-			_globalMatrices[(mtxOffset + 8)] = n31 * m11 + n32 * m21 + n33 * m31;
-			_globalMatrices[(mtxOffset + 9)] = n31 * m12 + n32 * m22 + n33 * m32;
-			_globalMatrices[(mtxOffset + 10)] = n31 * m13 + n32 * m23 + n33 * m33;
-			_globalMatrices[(mtxOffset + 11)] = n31 * m14 + n32 * m24 + n33 * m34 + vec.z;
+			_globalMatrices[(mtxOffset)] = n11*m11 + n12*m21 + n13*m31;
+			_globalMatrices[(mtxOffset+1)] = n11*m12 + n12*m22 + n13*m32;
+			_globalMatrices[(mtxOffset+2)] = n11*m13 + n12*m23 + n13*m33;
+			_globalMatrices[(mtxOffset+3)] = n11*m14 + n12*m24 + n13*m34 + vec.x;
+			_globalMatrices[(mtxOffset+4)] = n21*m11 + n22*m21 + n23*m31;
+			_globalMatrices[(mtxOffset+5)] = n21*m12 + n22*m22 + n23*m32;
+			_globalMatrices[(mtxOffset+6)] = n21*m13 + n22*m23 + n23*m33;
+			_globalMatrices[(mtxOffset+7)] = n21*m14 + n22*m24 + n23*m34 + vec.y;
+			_globalMatrices[(mtxOffset+8)] = n31*m11 + n32*m21 + n33*m31;
+			_globalMatrices[(mtxOffset+9)] = n31*m12 + n32*m22 + n33*m32;
+			_globalMatrices[(mtxOffset+10)] = n31*m13 + n32*m23 + n33*m33;
+			_globalMatrices[(mtxOffset+11)] = n31*m14 + n32*m24 + n33*m34 + vec.z;
 
-			mtxOffset = Std.int(mtxOffset + 12);
+			mtxOffset += 12;
 		}
 	}
+
+	// NEW: helper to blend additive animations
+	private function applyAdditivePose(basePose:SkeletonPose, additivePose:SkeletonPose):Void {
+		var baseJoints = basePose.jointPoses;
+		var addJoints = additivePose.jointPoses;
+
+		for (i in 0...basePose.numJointPoses) {
+			var baseJoint = baseJoints[i];
+			var addJoint = addJoints[i];
+
+			// combine rotations
+			var qBase = baseJoint.orientation;
+			var qAdd = addJoint.orientation;
+			var qResult = new Quaternion();
+			qResult.w = qBase.w*qAdd.w - qBase.x*qAdd.x - qBase.y*qAdd.y - qBase.z*qAdd.z;
+			qResult.x = qBase.w*qAdd.x + qBase.x*qAdd.w + qBase.y*qAdd.z - qBase.z*qAdd.y;
+			qResult.y = qBase.w*qAdd.y - qBase.x*qAdd.z + qBase.y*qAdd.w + qBase.z*qAdd.x;
+			qResult.z = qBase.w*qAdd.z + qBase.x*qAdd.y - qBase.y*qAdd.x + qBase.z*qAdd.w;
+			baseJoint.orientation = qResult;
+
+			// combine translations
+			baseJoint.translation.x += addJoint.translation.x;
+			baseJoint.translation.y += addJoint.translation.y;
+			baseJoint.translation.z += addJoint.translation.z;
+		}
+	}
+
 
 	/**
 	 * If the animation can't be performed on GPU, transform vertices manually
